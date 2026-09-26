@@ -1,0 +1,3 @@
+export function SupabaseSetup() {
+  return <main className="auth-screen"><section className="auth-panel"><p className="eyebrow">StudyPulse setup</p><h1>Connect your Supabase project</h1><p className="auth-copy">Add the project URL and anon key to your local environment, then apply the SQL schema from the <code>supabase</code> folder.</p><ol className="setup-steps"><li>Copy <code>.env.example</code> to <code>.env.local</code>.</li><li>Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>.</li><li>Run the schema in the Supabase SQL Editor.</li></ol></section></main>;
+}
