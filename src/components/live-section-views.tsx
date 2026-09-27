@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowRight, BookOpen, Check, Crown, MessageCircle, Plus, Save, Send, Star, Trophy, X } from "lucide-react";
+import { ArrowRight, BookOpen, Check, Crown, MessageCircle, Pencil, Plus, Save, Send, Star, Trash2, Trophy, X } from "lucide-react";
 import { type Section, type Subject } from "@/lib/study-data";
 import { createClient } from "@/lib/supabase/client";
 import type { Database, Json } from "@/lib/supabase/types";
@@ -21,7 +21,7 @@ function optionList(options: Json): string[] {
   return Array.isArray(options) ? options.filter((option): option is string => typeof option === "string") : [];
 }
 
-export function StudyView({ subjects, user, onAddSubject, onAccountRefresh }: { subjects: Subject[]; user: User; onAddSubject: (subject: Omit<Subject, "id" | "progress">) => Promise<Subject | null>; onAccountRefresh: () => Promise<void> }) {
+export function StudyView({ subjects, user, onAddSubject, onUpdateSubject, onDeleteSubject, onAccountRefresh }: { subjects: Subject[]; user: User; onAddSubject: (subject: Omit<Subject, "id" | "progress" | "createdBy">) => Promise<Subject | null>; onUpdateSubject: (subjectId: string, changes: { name: string; detail: string }) => Promise<string | null>; onDeleteSubject: (subjectId: string) => Promise<string | null>; onAccountRefresh: () => Promise<void> }) {
   const [supabase] = useState(createClient);
   const [subjectId, setSubjectId] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -32,6 +32,11 @@ export function StudyView({ subjects, user, onAddSubject, onAccountRefresh }: { 
   const [addingSubject, setAddingSubject] = useState(false);
   const [subjectName, setSubjectName] = useState("");
   const [subjectDetail, setSubjectDetail] = useState("");
+  const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
+  const [editingSubjectName, setEditingSubjectName] = useState("");
+  const [editingSubjectDetail, setEditingSubjectDetail] = useState("");
+  const [savingSubject, setSavingSubject] = useState(false);
+  const [deletingSubjectId, setDeletingSubjectId] = useState<string | null>(null);
   const [questionForm, setQuestionForm] = useState(false);
   const [questionPrompt, setQuestionPrompt] = useState("");
   const [questionOptions, setQuestionOptions] = useState("");
@@ -42,7 +47,11 @@ export function StudyView({ subjects, user, onAddSubject, onAccountRefresh }: { 
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!subjects.some((subject) => subject.id === subjectId)) setSubjectId(subjects[0]?.id ?? "");
+    if (!subjects.some((subject) => subject.id === subjectId)) {
+      setSubjectId(subjects[0]?.id ?? "");
+      setActiveQuestion(null);
+      setFeedback("");
+    }
   }, [subjects, subjectId]);
 
   useEffect(() => {
@@ -70,6 +79,28 @@ export function StudyView({ subjects, user, onAddSubject, onAccountRefresh }: { 
     if (!saved) { setError("Could not save this subject. It may already exist."); return; }
     setSubjectId(saved.id);
     setSubjectName(""); setSubjectDetail(""); setAddingSubject(false); setError("");
+  }
+
+  async function saveSubjectChanges(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingSubjectId) return;
+    const name = editingSubjectName.trim();
+    if (!name) return;
+    setSavingSubject(true);
+    const updateError = await onUpdateSubject(editingSubjectId, { name, detail: editingSubjectDetail.trim() });
+    setSavingSubject(false);
+    if (updateError) { setError(updateError); return; }
+    setEditingSubjectId(null); setError("");
+  }
+
+  async function removeSubject(subject: Subject) {
+    const message = `Delete "${subject.name}"? Its questions, flashcards, exams, and related study history will also be deleted.`;
+    if (!window.confirm(message)) return;
+    setDeletingSubjectId(subject.id);
+    const deleteError = await onDeleteSubject(subject.id);
+    setDeletingSubjectId(null);
+    if (deleteError) { setError(deleteError); return; }
+    setEditingSubjectId(null); setError("");
   }
 
   async function saveQuestion(event: FormEvent<HTMLFormElement>) {
@@ -106,6 +137,7 @@ export function StudyView({ subjects, user, onAddSubject, onAccountRefresh }: { 
   return <div className="content"><Heading title="Play & Study" copy="Build and study shared questions and flashcards." />
     <div className="section-row"><div><h2>Shared subjects</h2><p>Study content added by students.</p></div><button className="primary-button" type="button" onClick={() => setAddingSubject(!addingSubject)}><Plus size={14} /> Add subject</button></div>
     {addingSubject && <form className="toolbar" onSubmit={saveSubject}><input aria-label="Subject name" placeholder="Subject name" value={subjectName} onChange={(event) => setSubjectName(event.target.value)} maxLength={80} required /><input aria-label="Subject description" placeholder="Description" value={subjectDetail} onChange={(event) => setSubjectDetail(event.target.value)} maxLength={180} /><button className="outline-button">Save subject</button></form>}
+    {subjects.some((subject) => subject.createdBy === user.id) && <div className="manage-list" aria-label="Manage your subjects">{subjects.filter((subject) => subject.createdBy === user.id).map((subject) => <div className="manage-row" key={subject.id}>{editingSubjectId === subject.id ? <form className="manage-form" onSubmit={(event) => void saveSubjectChanges(event)}><input aria-label="Edit subject name" value={editingSubjectName} onChange={(event) => setEditingSubjectName(event.target.value)} maxLength={80} required /><input aria-label="Edit subject description" value={editingSubjectDetail} onChange={(event) => setEditingSubjectDetail(event.target.value)} maxLength={180} /><div className="manage-actions"><button className="icon-button" aria-label="Save subject changes" title="Save changes" disabled={savingSubject}><Save size={15} /></button><button className="icon-button" type="button" aria-label="Cancel subject edit" title="Cancel" onClick={() => setEditingSubjectId(null)}><X size={15} /></button></div></form> : <><div className="manage-copy"><strong>{subject.name}</strong><small>{subject.detail || "No description"}</small></div><div className="manage-actions"><button className="icon-button" aria-label={`Edit ${subject.name}`} title="Edit subject" onClick={() => { setEditingSubjectId(subject.id); setEditingSubjectName(subject.name); setEditingSubjectDetail(subject.detail); setError(""); }}><Pencil size={15} /></button><button className="icon-button manage-delete" aria-label={`Delete ${subject.name}`} title="Delete subject" disabled={deletingSubjectId === subject.id} onClick={() => void removeSubject(subject)}><Trash2 size={15} /></button></div></>}</div>)}</div>}
     {error && <p className="auth-error" role="alert">{error}</p>}
     {subjects.length === 0 ? <div className="empty-state">No subjects yet. Add the first shared subject to begin.</div> : <><div className="section-row"><div><h2>Question bank</h2><p>{questions.length} shared questions</p></div><select aria-label="Study subject" value={subjectId} onChange={(event) => { setSubjectId(event.target.value); setActiveQuestion(null); setFeedback(""); }}>{subjects.map((subject) => <option value={subject.id} key={subject.id}>{subject.name}</option>)}</select></div>
       <div className="panel-grid"><section className="card"><div className="card-head"><div><h2>Quick practice</h2><p>Answers are checked by the database.</p></div><button className="outline-button" onClick={() => { const next = questions[Math.floor(Math.random() * questions.length)]; setActiveQuestion(next ?? null); setAnswer(""); setFeedback(""); }} disabled={!questions.length}><ArrowRight size={13} /> New question</button></div>
@@ -129,6 +161,12 @@ export function ExamsView({ subjects, user, onAccountRefresh }: { subjects: Subj
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const [editingPlanTitle, setEditingPlanTitle] = useState("");
+  const [editingPlanSubjectId, setEditingPlanSubjectId] = useState("");
+  const [editingPlanQuestionCount, setEditingPlanQuestionCount] = useState("5");
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
 
   async function loadPlans() {
     const { data, error: loadError } = await supabase.from("exam_plans").select("*").eq("owner_id", user.id).order("created_at", { ascending: false });
@@ -151,6 +189,31 @@ export function ExamsView({ subjects, user, onAccountRefresh }: { subjects: Subj
     const { error: createError } = await supabase.from("exam_plans").insert({ owner_id: user.id, subject_id: subjectId, title: title.trim(), question_count: count });
     if (createError) { setError(createError.message); return; }
     setTitle(""); setError(""); await loadPlans();
+  }
+
+  async function savePlan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingPlanId || !editingPlanTitle.trim() || !editingPlanSubjectId) return;
+    const questionCount = Number(editingPlanQuestionCount);
+    if (!Number.isInteger(questionCount) || questionCount < 1 || questionCount > 100) {
+      setError("Question count must be between 1 and 100."); return;
+    }
+    setSavingPlan(true);
+    const { data, error: updateError } = await supabase.from("exam_plans").update({ title: editingPlanTitle.trim(), subject_id: editingPlanSubjectId, question_count: questionCount }).eq("id", editingPlanId).eq("owner_id", user.id).select("*").maybeSingle();
+    setSavingPlan(false);
+    if (updateError || !data) { setError(updateError?.message ?? "Could not update this exam plan."); return; }
+    setPlans((current) => current.map((plan) => plan.id === data.id ? data : plan));
+    setEditingPlanId(null); setError("");
+  }
+
+  async function deletePlan(plan: ExamPlan) {
+    if (!window.confirm(`Delete "${plan.title}" and its saved attempts?`)) return;
+    setDeletingPlanId(plan.id);
+    const { data, error: deleteError } = await supabase.from("exam_plans").delete().eq("id", plan.id).eq("owner_id", user.id).select("id").maybeSingle();
+    setDeletingPlanId(null);
+    if (deleteError || !data) { setError(deleteError?.message ?? "Could not delete this exam plan."); return; }
+    setPlans((current) => current.filter((item) => item.id !== plan.id));
+    setError("");
   }
 
   async function beginExam(plan: ExamPlan) {
@@ -181,7 +244,7 @@ export function ExamsView({ subjects, user, onAccountRefresh }: { subjects: Subj
     <section className="card"><div className="card-head"><div><h2>Your exam plans</h2><p>Plans and attempts are stored in your account.</p></div><BookOpen size={20} color="var(--green)" /></div>
       <form className="toolbar" onSubmit={createPlan}><input aria-label="Exam title" placeholder="Exam title" value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={120} /><select aria-label="Exam subject" value={subjectId} onChange={(event) => setSubjectId(event.target.value)} required><option value="" disabled>Select subject</option>{subjects.map((subject) => <option value={subject.id} key={subject.id}>{subject.name}</option>)}</select><select aria-label="Question count" value={count} onChange={(event) => setCount(Number(event.target.value))}><option value={5}>5 questions</option><option value={10}>10 questions</option><option value={20}>20 questions</option></select><button className="outline-button" disabled={!subjects.length}><Save size={13} /> Save plan</button></form>
       {error && <p className="auth-error" role="alert">{error}</p>}
-      {plans.length ? <div className="exam-list">{plans.map((plan) => <div className="exam-item" key={plan.id}><span className="exam-icon"><BookOpen size={16} /></span><div><strong>{plan.title}</strong><small>{subjects.find((subject) => subject.id === plan.subject_id)?.name ?? "Subject"} · {plan.question_count} questions</small></div><button className="outline-button" onClick={() => void beginExam(plan)}>Start</button></div>)}</div> : <p className="empty-copy">No exam plans saved yet.</p>}
+      {plans.length ? <div className="exam-list">{plans.map((plan) => <div className="exam-item exam-plan-item" key={plan.id}><span className="exam-icon"><BookOpen size={16} /></span>{editingPlanId === plan.id ? <form className="manage-form exam-edit-form" onSubmit={(event) => void savePlan(event)}><input aria-label="Edit exam title" value={editingPlanTitle} onChange={(event) => setEditingPlanTitle(event.target.value)} maxLength={120} required /><select aria-label="Edit exam subject" value={editingPlanSubjectId} onChange={(event) => setEditingPlanSubjectId(event.target.value)} required>{subjects.map((subject) => <option value={subject.id} key={subject.id}>{subject.name}</option>)}</select><input aria-label="Edit question count" type="number" min={1} max={100} value={editingPlanQuestionCount} onChange={(event) => setEditingPlanQuestionCount(event.target.value)} required /><div className="manage-actions"><button className="icon-button" aria-label="Save exam changes" title="Save changes" disabled={savingPlan}><Save size={15} /></button><button className="icon-button" type="button" aria-label="Cancel exam edit" title="Cancel" onClick={() => setEditingPlanId(null)}><X size={15} /></button></div></form> : <><div className="exam-plan-copy"><strong>{plan.title}</strong><small>{subjects.find((subject) => subject.id === plan.subject_id)?.name ?? "Subject"} · {plan.question_count} questions</small></div><div className="manage-actions">{active?.plan.id !== plan.id && <><button className="icon-button" aria-label={`Edit ${plan.title}`} title="Edit exam" onClick={() => { setEditingPlanId(plan.id); setEditingPlanTitle(plan.title); setEditingPlanSubjectId(plan.subject_id); setEditingPlanQuestionCount(String(plan.question_count)); setError(""); }}><Pencil size={15} /></button><button className="icon-button manage-delete" aria-label={`Delete ${plan.title}`} title="Delete exam" disabled={deletingPlanId === plan.id} onClick={() => void deletePlan(plan)}><Trash2 size={15} /></button></>}<button className="outline-button" disabled={!!active} onClick={() => void beginExam(plan)}>Start</button></div></>}</div>)}</div> : <p className="empty-copy">No exam plans saved yet.</p>}
     </section>
     {active && <section className="card exam-active"><div className="card-head"><div><p className="eyebrow">{subjects.find((subject) => subject.id === active.plan.subject_id)?.name}</p><h2>{active.plan.title}</h2></div><button className="icon-button" aria-label="Close exam" onClick={() => setActive(null)}><X size={16} /></button></div>{active.questions.map((question, index) => <fieldset className="exam-question" key={question.id}><legend>{index + 1}. {question.prompt}</legend>{optionList(question.options).map((option) => <label className="exam-choice" key={option}><input type="radio" name={question.id} checked={answers[question.id] === option} disabled={!!result} onChange={() => setAnswers((current) => ({ ...current, [question.id]: option }))} />{option}</label>)}</fieldset>)}{result ? <p className="auth-message" role="status">Result saved: {result}</p> : <button className="primary-button" disabled={active.questions.some((question) => !answers[question.id])} onClick={() => void submitExam()}>Submit exam <Check size={14} /></button>}</section>}
   </div>;
@@ -196,6 +259,11 @@ export function RoomsView({ subjects, user }: { subjects: Subject[]; user: User 
   const [subjectId, setSubjectId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [editingRoomTitle, setEditingRoomTitle] = useState("");
+  const [editingRoomSubjectId, setEditingRoomSubjectId] = useState("");
+  const [savingRoom, setSavingRoom] = useState(false);
+  const [deletingRoomId, setDeletingRoomId] = useState<string | null>(null);
   const activeRoomId = activeRoom?.id;
 
   async function loadRooms() {
@@ -243,6 +311,29 @@ export function RoomsView({ subjects, user }: { subjects: Subject[]; user: User 
     setTitle(""); setSubjectId(""); setError(""); setActiveRoom(data); await loadRooms();
   }
 
+  async function saveRoom(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingRoomId || !editingRoomTitle.trim()) return;
+    setSavingRoom(true);
+    const { data, error: updateError } = await supabase.from("study_rooms").update({ title: editingRoomTitle.trim(), subject_id: editingRoomSubjectId || null }).eq("id", editingRoomId).eq("created_by", user.id).select("*").maybeSingle();
+    setSavingRoom(false);
+    if (updateError || !data) { setError(updateError?.message ?? "You can only edit rooms you created."); return; }
+    setRooms((current) => current.map((room) => room.id === data.id ? data : room));
+    setActiveRoom((current) => current?.id === data.id ? data : current);
+    setEditingRoomId(null); setError("");
+  }
+
+  async function removeRoom(room: Room) {
+    if (!window.confirm(`Delete "${room.title}" and all of its messages?`)) return;
+    setDeletingRoomId(room.id);
+    const { data, error: deleteError } = await supabase.from("study_rooms").delete().eq("id", room.id).eq("created_by", user.id).select("id").maybeSingle();
+    setDeletingRoomId(null);
+    if (deleteError || !data) { setError(deleteError?.message ?? "You can only delete rooms you created."); return; }
+    setRooms((current) => current.filter((item) => item.id !== room.id));
+    setActiveRoom((current) => current?.id === room.id ? null : current);
+    setEditingRoomId(null); setError("");
+  }
+
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activeRoom || !message.trim()) return;
@@ -251,7 +342,7 @@ export function RoomsView({ subjects, user }: { subjects: Subject[]; user: User 
   }
 
   return <div className="content"><Heading title="Study rooms" copy="Create or join a room for shared text and voice sessions." />
-    <section className="card"><div className="card-head"><div><h2>Open rooms</h2><p>Rooms and messages are shared across signed-in students.</p></div></div><form className="toolbar" onSubmit={createRoom}><input aria-label="Room name" placeholder="Room name" value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={100} /><select aria-label="Room subject" value={subjectId} onChange={(event) => setSubjectId(event.target.value)}><option value="">Open study</option>{subjects.map((subject) => <option value={subject.id} key={subject.id}>{subject.name}</option>)}</select><button className="outline-button"><Plus size={13} /> Create room</button></form>{error && <p className="auth-error" role="alert">{error}</p>}{rooms.length ? rooms.map((room) => <div className="exam-item" key={room.id}><span className="exam-icon"><MessageCircle size={16} /></span><div><strong>{room.title}</strong><small>{subjects.find((subject) => subject.id === room.subject_id)?.name ?? "Open study"}</small></div><button className="outline-button" onClick={() => void openRoom(room)}>Join room <ArrowRight size={13} /></button></div>) : <p className="empty-copy">No rooms are open yet.</p>}</section>
+    <section className="card"><div className="card-head"><div><h2>Open rooms</h2><p>Rooms and messages are shared across signed-in students.</p></div></div><form className="toolbar" onSubmit={createRoom}><input aria-label="Room name" placeholder="Room name" value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={100} /><select aria-label="Room subject" value={subjectId} onChange={(event) => setSubjectId(event.target.value)}><option value="">Open study</option>{subjects.map((subject) => <option value={subject.id} key={subject.id}>{subject.name}</option>)}</select><button className="outline-button"><Plus size={13} /> Create room</button></form>{error && <p className="auth-error" role="alert">{error}</p>}{rooms.length ? rooms.map((room) => <div className="exam-item room-item" key={room.id}><span className="exam-icon"><MessageCircle size={16} /></span>{editingRoomId === room.id ? <form className="manage-form" onSubmit={(event) => void saveRoom(event)}><input aria-label="Edit room name" value={editingRoomTitle} onChange={(event) => setEditingRoomTitle(event.target.value)} maxLength={100} required /><select aria-label="Edit room subject" value={editingRoomSubjectId} onChange={(event) => setEditingRoomSubjectId(event.target.value)}><option value="">Open study</option>{subjects.map((subject) => <option value={subject.id} key={subject.id}>{subject.name}</option>)}</select><div className="manage-actions"><button className="icon-button" aria-label="Save room changes" title="Save changes" disabled={savingRoom}><Save size={15} /></button><button className="icon-button" type="button" aria-label="Cancel room edit" title="Cancel" onClick={() => setEditingRoomId(null)}><X size={15} /></button></div></form> : <><div className="room-item-copy"><strong>{room.title}</strong><small>{subjects.find((subject) => subject.id === room.subject_id)?.name ?? "Open study"}</small></div><div className="manage-actions">{room.created_by === user.id && <><button className="icon-button" aria-label={`Edit ${room.title}`} title="Edit room" onClick={() => { setEditingRoomId(room.id); setEditingRoomTitle(room.title); setEditingRoomSubjectId(room.subject_id ?? ""); setError(""); }}><Pencil size={15} /></button><button className="icon-button manage-delete" aria-label={`Delete ${room.title}`} title="Delete room" disabled={deletingRoomId === room.id} onClick={() => void removeRoom(room)}><Trash2 size={15} /></button></>}<button className="outline-button" onClick={() => void openRoom(room)}>Join room <ArrowRight size={13} /></button></div></>}</div>) : <p className="empty-copy">No rooms are open yet.</p>}</section>
     {activeRoom && <section className="card room-chat"><div className="card-head"><div><h2>{activeRoom.title}</h2><p>{subjects.find((subject) => subject.id === activeRoom.subject_id)?.name ?? "Open study"}</p></div><button className="icon-button" aria-label="Close room" onClick={() => setActiveRoom(null)}><X size={16} /></button></div><VoiceCall roomId={activeRoom.id} /><div className="chat-log" aria-live="polite">{messages.length ? messages.map((item) => <p className="chat-line" key={item.id}><strong>{item.display_name}: </strong>{item.content}</p>) : <p className="empty-copy">No messages yet.</p>}</div><form className="chat-form" onSubmit={sendMessage}><input value={message} onChange={(event) => setMessage(event.target.value)} aria-label="Chat message" placeholder="Write a message" maxLength={2000} required /><button className="icon-button" aria-label="Send message"><Send size={15} /></button></form></section>}
   </div>;
 }
@@ -278,8 +369,8 @@ export function ProfileView({ user, xp, onDisplayNameChange }: { user: User; xp:
   return <div className="content"><Heading title="Your profile" copy="Account details and points earned by your study activity." /><section className="card profile-card"><div className="profile-banner"><span className="avatar">{name.slice(0, 2).toUpperCase() || "ST"}</span><div><h2>{name || "Student"}</h2><p>{user.email}</p></div></div><form className="toolbar" onSubmit={updateProfile}><input aria-label="Display name" value={name} onChange={(event) => { setName(event.target.value); setSaved(false); }} maxLength={80} required /><button className="outline-button"><Save size={13} /> Save profile</button></form>{error && <p className="auth-error" role="alert">{error}</p>}{saved && <p className="auth-message" role="status">Profile saved.</p>}<div className="stat-row"><div className="stat-card"><div className="stat-icon mint"><Trophy size={18} /></div><div><small>Total XP</small><strong>{xp.toLocaleString()}</strong></div></div><div className="stat-card"><div className="stat-icon gold"><Star size={18} /></div><div><small>Account</small><strong>Active</strong></div></div></div></section></div>;
 }
 
-export function SectionView({ section, xp, subjects, user, onAddSubject, onAccountRefresh, onDisplayNameChange }: { section: Section; xp: number; subjects: Subject[]; user: User; onAddSubject: (subject: Omit<Subject, "id" | "progress">) => Promise<Subject | null>; onAccountRefresh: () => Promise<void>; onDisplayNameChange: (name: string) => void }) {
-  if (section === "Play & Study") return <StudyView subjects={subjects} user={user} onAddSubject={onAddSubject} onAccountRefresh={onAccountRefresh} />;
+export function SectionView({ section, xp, subjects, user, onAddSubject, onUpdateSubject, onDeleteSubject, onAccountRefresh, onDisplayNameChange }: { section: Section; xp: number; subjects: Subject[]; user: User; onAddSubject: (subject: Omit<Subject, "id" | "progress" | "createdBy">) => Promise<Subject | null>; onUpdateSubject: (subjectId: string, changes: { name: string; detail: string }) => Promise<string | null>; onDeleteSubject: (subjectId: string) => Promise<string | null>; onAccountRefresh: () => Promise<void>; onDisplayNameChange: (name: string) => void }) {
+  if (section === "Play & Study") return <StudyView subjects={subjects} user={user} onAddSubject={onAddSubject} onUpdateSubject={onUpdateSubject} onDeleteSubject={onDeleteSubject} onAccountRefresh={onAccountRefresh} />;
   if (section === "Exams") return <ExamsView subjects={subjects} user={user} onAccountRefresh={onAccountRefresh} />;
   if (section === "Study Rooms") return <RoomsView subjects={subjects} user={user} />;
   if (section === "Leaderboard") return <LeaderboardView />;

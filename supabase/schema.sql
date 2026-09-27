@@ -213,6 +213,7 @@ grant select on public.profiles to authenticated;
 grant update (display_name) on public.profiles to authenticated;
 grant select, insert on public.subjects to authenticated;
 grant update (name, description, icon, tone) on public.subjects to authenticated;
+grant delete on public.subjects to authenticated;
 grant select (id, subject_id, prompt, options, created_by, published, created_at) on public.questions to authenticated;
 grant insert (subject_id, prompt, options, correct_answer, created_by, published) on public.questions to authenticated;
 grant select (id, subject_id, front, back, created_by, created_at) on public.flashcards to authenticated;
@@ -228,6 +229,7 @@ create policy "Users can update their own profile" on public.profiles for update
 create policy "Authenticated users can read subjects" on public.subjects for select to authenticated using (true);
 create policy "Authenticated users can add shared subjects" on public.subjects for insert to authenticated with check (created_by = auth.uid());
 create policy "Creators can edit their subjects" on public.subjects for update to authenticated using (created_by = auth.uid()) with check (created_by = auth.uid());
+create policy "Creators can delete their subjects" on public.subjects for delete to authenticated using (created_by = auth.uid());
 create policy "Authenticated users can read published questions" on public.questions for select to authenticated using (published = true);
 create policy "Authenticated users can add questions" on public.questions for insert to authenticated with check (created_by = auth.uid());
 create policy "Authenticated users can read shared flashcards" on public.flashcards for select to authenticated using (true);

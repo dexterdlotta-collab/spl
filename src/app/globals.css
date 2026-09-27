@@ -195,6 +195,18 @@ h1 { margin-bottom: 7px; font-family: Georgia, "Times New Roman", serif; font-si
 .exam-item > div:nth-child(2) { flex: 1; }
 .exam-item strong { display: block; font-size: 11px; }
 .exam-item small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+.room-item { flex-wrap: wrap; }
+.room-item-copy, .manage-copy { flex: 1; min-width: 0; }
+.room-item-copy strong, .manage-copy strong { display: block; overflow-wrap: anywhere; font-size: 11px; }
+.room-item-copy small, .manage-copy small { display: block; margin-top: 4px; overflow-wrap: anywhere; color: var(--muted); font-size: 10px; }
+.manage-list { margin: 0 0 16px; }
+.manage-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; padding: 10px 0; border-top: 1px solid var(--line); }
+.manage-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.manage-delete { color: #b42318; }
+.manage-delete:hover { border-color: #b42318; }
+.manage-form { display: grid; flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: center; gap: 8px; min-width: 0; }
+.exam-edit-form { grid-template-columns: minmax(120px, 1fr) minmax(120px, .8fr) 100px auto; }
+.manage-form input, .manage-form select { width: 100%; min-width: 0; min-height: 37px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); background: var(--surface); }
 .empty-state { padding: 27px 15px; border: 1px dashed var(--line); border-radius: 9px; color: var(--muted); text-align: center; font-size: 12px; }
 .room-card { padding: 18px; }
 .room-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
@@ -305,6 +317,12 @@ h1 { margin-bottom: 7px; font-family: Georgia, "Times New Roman", serif; font-si
   .subject-wide { flex-wrap: wrap; }
   .subject-wide-copy { min-width: 150px; }
   .subject-wide .outline-button { margin-left: auto; }
+  .manage-form { grid-template-columns: minmax(0, 1fr); }
+  .exam-edit-form { grid-template-columns: minmax(0, 1fr) 90px; }
+  .exam-edit-form input:first-child, .exam-edit-form select, .exam-edit-form .manage-actions { grid-column: 1 / -1; }
+  .exam-edit-form .manage-actions { justify-self: end; }
+  .room-item .manage-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .room-item .manage-actions { grid-column: 1 / -1; justify-self: end; }
   .room-body { grid-template-columns: 1fr; }
   .room-stage { min-height: 180px; }
   .badge-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

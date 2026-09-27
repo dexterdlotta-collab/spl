@@ -32,7 +32,7 @@ export function AppShell({ user }: { user: { id: string; email: string; displayN
     let activeEffect = true;
     async function loadAccountData() {
       const [subjectResult, profileResult, progressResult] = await Promise.all([
-        supabase.from("subjects").select("id,name,description,icon,tone").order("name"),
+        supabase.from("subjects").select("id,name,description,icon,tone,created_by").order("name"),
         supabase.from("profiles").select("display_name,xp").eq("id", user.id).single(),
         supabase.from("subject_progress").select("subject_id,answered,correct").eq("user_id", user.id),
       ]);
@@ -44,7 +44,7 @@ export function AppShell({ user }: { user: { id: string; email: string; displayN
       const progressBySubject = new Map(progressResult.data.map((entry) => [entry.subject_id, entry]));
       setSubjectList(subjectResult.data.map((row) => {
         const progress = progressBySubject.get(row.id);
-        return { id: row.id, name: row.name, detail: row.description, icon: row.icon, tone: row.tone, progress: progress?.answered ? Math.round((progress.correct / progress.answered) * 100) : 0 };
+        return { id: row.id, name: row.name, detail: row.description, icon: row.icon, tone: row.tone, createdBy: row.created_by, progress: progress?.answered ? Math.round((progress.correct / progress.answered) * 100) : 0 };
       }));
       setXp(profileResult.data.xp);
       setDisplayName(profileResult.data.display_name);
@@ -57,12 +57,28 @@ export function AppShell({ user }: { user: { id: string; email: string; displayN
     };
   }, [supabase, user.id]);
 
-  async function addSubject(subject: Omit<Subject, "id" | "progress">): Promise<Subject | null> {
-    const { data, error } = await supabase.from("subjects").insert({ name: subject.name, description: subject.detail, icon: subject.icon, tone: subject.tone, created_by: user.id }).select("id,name,description,icon,tone").single();
+  async function addSubject(subject: Omit<Subject, "id" | "progress" | "createdBy">): Promise<Subject | null> {
+    const { data, error } = await supabase.from("subjects").insert({ name: subject.name, description: subject.detail, icon: subject.icon, tone: subject.tone, created_by: user.id }).select("id,name,description,icon,tone,created_by").single();
     if (error || !data) return null;
-    const savedSubject: Subject = { id: data.id, name: data.name, detail: data.description, icon: data.icon, tone: data.tone, progress: 0 };
+    const savedSubject: Subject = { id: data.id, name: data.name, detail: data.description, icon: data.icon, tone: data.tone, createdBy: data.created_by, progress: 0 };
     setSubjectList((current) => current.some((item) => item.id === savedSubject.id) ? current : [...current, savedSubject].sort((left, right) => left.name.localeCompare(right.name)));
     return savedSubject;
+  }
+
+  async function updateSubject(subjectId: string, changes: { name: string; detail: string }): Promise<string | null> {
+    const { data, error } = await supabase.from("subjects").update({ name: changes.name, description: changes.detail }).eq("id", subjectId).eq("created_by", user.id).select("id").maybeSingle();
+    if (error) return error.message;
+    if (!data) return "You can only edit subjects you created.";
+    setSubjectList((current) => current.map((subject) => subject.id === subjectId ? { ...subject, ...changes } : subject).sort((left, right) => left.name.localeCompare(right.name)));
+    return null;
+  }
+
+  async function deleteSubject(subjectId: string): Promise<string | null> {
+    const { data, error } = await supabase.from("subjects").delete().eq("id", subjectId).eq("created_by", user.id).select("id").maybeSingle();
+    if (error) return error.message;
+    if (!data) return "You can only delete subjects you created.";
+    setSubjectList((current) => current.filter((subject) => subject.id !== subjectId));
+    return null;
   }
 
   async function signOut() {
@@ -80,7 +96,7 @@ export function AppShell({ user }: { user: { id: string; email: string; displayN
     <main className="main-area">
       <header className="topbar"><div className="breadcrumb">Workspace <span style={{ margin: "0 8px", color: "var(--line)" }}>/</span><strong>{active}</strong></div><div className="top-actions"><label className="search-box"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search subjects..." aria-label="Search subjects" /></label><button className="icon-button" aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} title={dark ? "Light mode" : "Dark mode"} onClick={() => setDark(!dark)}>{dark ? <Sun size={16} /> : <Moon size={16} />}</button></div></header>
       {loadError && <p className="auth-error" role="alert">{loadError}</p>}
-      {active === "Overview" ? <OverviewDashboard onNavigate={setActive} query={query} subjects={subjectList} xp={xp} user={{ ...user, displayName }} /> : <SectionView section={active} xp={xp} subjects={subjectList} onAddSubject={addSubject} user={{ ...user, displayName }} onAccountRefresh={async () => { const { data } = await supabase.from("profiles").select("xp").eq("id", user.id).single(); if (data) setXp(data.xp); }} onDisplayNameChange={setDisplayName} />}
+      {active === "Overview" ? <OverviewDashboard onNavigate={setActive} query={query} subjects={subjectList} xp={xp} user={{ ...user, displayName }} /> : <SectionView section={active} xp={xp} subjects={subjectList} onAddSubject={addSubject} onUpdateSubject={updateSubject} onDeleteSubject={deleteSubject} user={{ ...user, displayName }} onAccountRefresh={async () => { const { data } = await supabase.from("profiles").select("xp").eq("id", user.id).single(); if (data) setXp(data.xp); }} onDisplayNameChange={setDisplayName} />}
     </main>
   </div>;
 }
