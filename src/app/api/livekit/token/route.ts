@@ -8,8 +8,8 @@ export async function POST(request: NextRequest) {
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
   const apiKey = process.env.LIVEKIT_API_KEY;
   const apiSecret = process.env.LIVEKIT_API_SECRET;
-  if (!livekitUrl || !apiKey || !apiSecret) {
-    return NextResponse.json({ error: "Voice calling is not configured." }, { status: 503 });
+  if (!livekitUrl || !apiKey || !apiSecret || apiSecret.trim().toLowerCase() === "your-livekit-api-secret") {
+    return NextResponse.json({ error: "Set a valid LiveKit URL, API key, and API secret in the server environment." }, { status: 503 });
   }
 
   let body: unknown;
